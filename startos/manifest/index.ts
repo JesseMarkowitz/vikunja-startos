@@ -1,5 +1,5 @@
 import { setupManifest } from '@start9labs/start-sdk'
-import { alertInstall, alertUninstall, long, short } from './i18n'
+import { long, short } from './i18n'
 
 export const manifest = setupManifest({
   id: 'vikunja',
@@ -13,21 +13,13 @@ export const manifest = setupManifest({
   volumes: ['main', 'startos'],
   images: {
     vikunja: {
-      source: { dockerTag: 'vikunja/vikunja:2.3.0' },
+      source: { dockerTag: 'vikunja/vikunja:2.4.0' },
       arch: ['x86_64', 'aarch64'],
     },
     busybox: {
       source: { dockerTag: 'docker.io/busybox:1.36.1-musl' },
       arch: ['x86_64', 'aarch64'],
     },
-  },
-  alerts: {
-    install: alertInstall,
-    update: null,
-    uninstall: alertUninstall,
-    restore: null,
-    start: null,
-    stop: null,
   },
   dependencies: {},
 })
