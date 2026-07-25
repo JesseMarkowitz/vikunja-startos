@@ -37,14 +37,14 @@ This package wraps Vikunja for StartOS. The first user is created via a gated St
 
 ## Image and Container Runtime
 
-| Property      | Value                                          |
-| ------------- | ---------------------------------------------- |
-| Image source  | Upstream `vikunja/vikunja`, unmodified         |
-| Helper image  | `busybox` (init-time only)                     |
-| Architectures | `x86_64`, `aarch64`                            |
-| Base          | `FROM scratch`, `USER 1000`                    |
-| Entrypoint    | Default upstream entrypoint (web server)       |
-| HTTP port     | 3456                                           |
+| Property      | Value                                    |
+| ------------- | ---------------------------------------- |
+| Image source  | Upstream `vikunja/vikunja`, unmodified   |
+| Helper image  | `busybox` (init-time only)               |
+| Architectures | `x86_64`, `aarch64`                      |
+| Base          | `FROM scratch`, `USER 1000`              |
+| Entrypoint    | Default upstream entrypoint (web server) |
+| HTTP port     | 3456                                     |
 
 The busybox helper image is invoked once during init to create `/data/db` and `/data/files` and chown `/data` to UID 1000. It is not part of the runtime daemon chain.
 
@@ -52,9 +52,9 @@ The busybox helper image is invoked once during init to create `/data/db` and `/
 
 ## Volume and Data Layout
 
-| Volume    | Mount Point      | Purpose                                                            |
-| --------- | ---------------- | ------------------------------------------------------------------ |
-| `main`    | `/data`          | Vikunja's own persistent data: SQLite database and attachments     |
+| Volume    | Mount Point      | Purpose                                                              |
+| --------- | ---------------- | -------------------------------------------------------------------- |
+| `main`    | `/data`          | Vikunja's own persistent data: SQLite database and attachments       |
 | `startos` | (not mounted in) | StartOS package state — `store.json` (read host-side via FileHelper) |
 
 Vikunja's data and StartOS's package state are kept on separate volumes so the
@@ -93,19 +93,19 @@ Once the first user exists, log in at `https://<primary-url>/`.
 
 ## Configuration Management
 
-| StartOS-Managed                                  | Upstream-Managed                                  |
-| ------------------------------------------------ | ------------------------------------------------- |
-| Primary URL → `VIKUNJA_SERVICE_PUBLICURL`        | All in-app preferences (theme, language, views)   |
-| Persistent JWT secret → `VIKUNJA_SERVICE_SECRET` | Per-user account, profile, notifications          |
-| Public registration on/off                       | Project / list / task management                  |
-| Self-service user deletion on/off                | Sharing, teams, kanban, filters                   |
-| Public link sharing on/off                       | Webhooks, API tokens                              |
-| Email reminders on/off                           | TOTP enrollment                                   |
-| Maximum attachment size                          | Migration imports (Todoist, Trello, Asana, etc.)  |
-| SMTP (disabled / system / custom)                |                                                   |
-| CORS origins (derived from primary URL)          |                                                   |
-| Time zone (fixed to UTC)                         |                                                   |
-| CalDAV and TOTP toggles (both forced on)         |                                                   |
+| StartOS-Managed                                  | Upstream-Managed                                 |
+| ------------------------------------------------ | ------------------------------------------------ |
+| Primary URL → `VIKUNJA_SERVICE_PUBLICURL`        | All in-app preferences (theme, language, views)  |
+| Persistent JWT secret → `VIKUNJA_SERVICE_SECRET` | Per-user account, profile, notifications         |
+| Public registration on/off                       | Project / list / task management                 |
+| Self-service user deletion on/off                | Sharing, teams, kanban, filters                  |
+| Public link sharing on/off                       | Webhooks, API tokens                             |
+| Email reminders on/off                           | TOTP enrollment                                  |
+| Maximum attachment size                          | Migration imports (Todoist, Trello, Asana, etc.) |
+| SMTP (disabled / system / custom)                |                                                  |
+| CORS origins (derived from primary URL)          |                                                  |
+| Time zone (fixed to UTC)                         |                                                  |
+| CalDAV and TOTP toggles (both forced on)         |                                                  |
 
 All Vikunja configuration is plumbed via environment variables (`VIKUNJA_<SECTION>_<KEY>`) — there is no on-disk `config.yml`. `getVikunjaEnv(store, smtp)` in `startos/utils.ts` builds the env: the stored settings pass straight through, and the caller supplies the `VIKUNJA_MAILER_*` fragment. Only the daemon (`main.ts`) and the **Send Test Email** action send mail, so they resolve SMTP — reading StartOS system SMTP only when the user chose it as the source — and pass the result via `mailerEnv()`. The other CLI commands don't send email, so they pass `{}` and never touch SMTP.
 
@@ -120,7 +120,7 @@ Mutable settings persist in `store.json` on the `startos` volume. Each setting i
 | `VIKUNJA_SERVICE_ENABLEUSERDELETION`   | `'true'`                                      | Enable / Disable Self-Service User Deletion |
 | `VIKUNJA_SERVICE_ENABLELINKSHARING`    | `'false'`                                     | Enable / Disable Link Sharing               |
 | `VIKUNJA_SERVICE_ENABLEEMAILREMINDERS` | `'false'`                                     | Enable / Disable Email Reminders            |
-| `VIKUNJA_FILES_MAXSIZE`                | `'20MB'`                                       | Set Max Attachment Size                     |
+| `VIKUNJA_FILES_MAXSIZE`                | `'20MB'`                                      | Set Max Attachment Size                     |
 | `smtp`                                 | `{ selection: 'disabled' }`                   | Configure SMTP                              |
 | `smtpAdvanced`                         | `{ skipTlsVerify: false, authType: 'plain' }` | Configure SMTP (Advanced group)             |
 
@@ -146,31 +146,31 @@ Three groups appear in the StartOS UI (sorted alphabetically): **Accounts**, **E
 
 ### Accounts
 
-| Display name                                                              | Action ID               | Availability   | Notes                                                                                            |
-| ------------------------------------------------------------------------- | ----------------------- | -------------- | ------------------------------------------------------------------------------------------------ |
-| Create User                                                               | `user-create`           | any            | Username + email only — generates and returns a strong password (never prompts). Surfaced as the critical install task until the first user exists (`initialUserCreated` flag); stays available for additional users. |
-| List Users                                                                | `user-list`             | any            | Parses Vikunja's `user list` table into per-user accordions (ID, username, email).               |
-| Reset User Password                                                       | `user-reset-password`   | only running   | `vikunja user reset-password --direct`. Generates and returns a strong password (never prompts). For lockout recovery. |
-| Delete User                                                               | `user-delete`           | only running   | `vikunja user delete --now`. Immediate and irreversible (action `warning` is the confirmation).  |
-| Enable Registration / Disable Registration                                | `toggle-registration`   | any            | Dynamic label. Default disabled.                                                                 |
-| Enable Self-Service User Deletion / Disable Self-Service User Deletion    | `toggle-user-deletion`  | any            | Dynamic label. Default enabled.                                                                  |
+| Display name                                                           | Action ID              | Availability | Notes                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------- | ---------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create User                                                            | `user-create`          | any          | Username + email only — generates and returns a strong password (never prompts). Surfaced as the critical install task until the first user exists (`initialUserCreated` flag); stays available for additional users. |
+| List Users                                                             | `user-list`            | any          | Parses Vikunja's `user list` table into per-user accordions (ID, username, email).                                                                                                                                    |
+| Reset User Password                                                    | `user-reset-password`  | only running | `vikunja user reset-password --direct`. Generates and returns a strong password (never prompts). For lockout recovery.                                                                                                |
+| Delete User                                                            | `user-delete`          | only running | `vikunja user delete --now`. Immediate and irreversible (action `warning` is the confirmation).                                                                                                                       |
+| Enable Registration / Disable Registration                             | `toggle-registration`  | any          | Dynamic label. Default disabled.                                                                                                                                                                                      |
+| Enable Self-Service User Deletion / Disable Self-Service User Deletion | `toggle-user-deletion` | any          | Dynamic label. Default enabled.                                                                                                                                                                                       |
 
 ### Email
 
-| Display name                                       | Action ID                | Availability | Notes                                                                                            |
-| -------------------------------------------------- | ------------------------ | ------------ | ------------------------------------------------------------------------------------------------ |
-| Configure SMTP                                     | `manage-smtp`            | any          | Disabled / system / custom selector — visually mirrors `/system/email`. Advanced fields nested.  |
-| Send Test Email                                    | `testmail`               | any          | `vikunja testmail`. Takes a recipient address and confirms delivery via the configured SMTP.     |
-| Enable Email Reminders / Disable Email Reminders   | `toggle-email-reminders` | any          | Dynamic label. Default disabled. Warns if SMTP is not configured when enabling.                  |
+| Display name                                     | Action ID                | Availability | Notes                                                                                           |
+| ------------------------------------------------ | ------------------------ | ------------ | ----------------------------------------------------------------------------------------------- |
+| Configure SMTP                                   | `manage-smtp`            | any          | Disabled / system / custom selector — visually mirrors `/system/email`. Advanced fields nested. |
+| Send Test Email                                  | `testmail`               | any          | `vikunja testmail`. Takes a recipient address and confirms delivery via the configured SMTP.    |
+| Enable Email Reminders / Disable Email Reminders | `toggle-email-reminders` | any          | Dynamic label. Default disabled. Warns if SMTP is not configured when enabling.                 |
 
 ### Other
 
-| Display name                                | Action ID              | Availability | Notes                                                                              |
-| ------------------------------------------- | ---------------------- | ------------ | ---------------------------------------------------------------------------------- |
-| Set Primary URL                             | `set-primary-url`      | any          | Change the primary URL (`.local` is auto-seeded on install — no setup task). Reactive: the daemon restarts when it changes. |
-| Enable Link Sharing / Disable Link Sharing  | `toggle-link-sharing`  | any          | Dynamic label. Default disabled. Warns about exposure when enabling.               |
-| Set Max Attachment Size                     | `max-attachment-size`  | any          | Change `VIKUNJA_FILES_MAXSIZE` (string format like `20MB`, `200MB`, `2GB`).        |
-| Run Diagnostics                             | `doctor`               | any          | `vikunja doctor` output for troubleshooting install or startup issues.             |
+| Display name                               | Action ID             | Availability | Notes                                                                                                                       |
+| ------------------------------------------ | --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Set Primary URL                            | `set-primary-url`     | any          | Change the primary URL (`.local` is auto-seeded on install — no setup task). Reactive: the daemon restarts when it changes. |
+| Enable Link Sharing / Disable Link Sharing | `toggle-link-sharing` | any          | Dynamic label. Default disabled. Warns about exposure when enabling.                                                        |
+| Set Max Attachment Size                    | `max-attachment-size` | any          | Change `VIKUNJA_FILES_MAXSIZE` (string format like `20MB`, `200MB`, `2GB`).                                                 |
+| Run Diagnostics                            | `doctor`              | any          | `vikunja doctor` output for troubleshooting install or startup issues.                                                      |
 
 Every action that shells into Vikunja runs in a temporary subcontainer with `/etc/passwd` and `/etc/group` planted (the upstream `FROM scratch` image has neither) and the full env block plumbed in.
 
@@ -186,9 +186,9 @@ Restore re-runs the standard init chain: `seedFiles → initVolumeLayout → ens
 
 ## Health Checks
 
-| Check         | Type           | Verifies                                | Grace period |
-| ------------- | -------------- | --------------------------------------- | ------------ |
-| Web Interface | daemon `ready` | `checkPortListening` on port 3456       | 30 s         |
+| Check         | Type           | Verifies                          | Grace period |
+| ------------- | -------------- | --------------------------------- | ------------ |
+| Web Interface | daemon `ready` | `checkPortListening` on port 3456 | 30 s         |
 
 Vikunja runs SQLite migrations on startup; the grace period accounts for migration time on slow disks. The success and failure messages shown in the StartOS UI are "The web interface is ready" and "The web interface is not ready".
 
@@ -233,7 +233,7 @@ The following work as documented upstream:
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and contribution guidelines.
+Build and development workflow follow the StartOS packaging guide: <https://docs.start9.com/packaging>. Keep `README.md`, `instructions.md`, and `AGENTS.md` in sync with any change to user-visible behavior or package structure.
 
 ---
 
@@ -243,7 +243,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and contribution g
 package_id: vikunja
 architectures: [x86_64, aarch64]
 volumes:
-  main: /data            # SQLite database + attachments
+  main: /data # SQLite database + attachments
   startos: (not mounted) # store.json package state
 ports:
   webui: 3456
@@ -290,6 +290,7 @@ actions:
 ```
 
 Maintainer pointers:
+
 - Env vars are built in `getVikunjaEnv(store, smtp)`; the mailer fragment comes from `mailerEnv()`, which only the daemon and Send Test Email build — all in `startos/utils.ts`.
 - All actions register through `startos/actions/index.ts`; the action files themselves are grouped into `accounts/`, `email/`, and `other/` subfolders matching their UI group.
 - All init steps register through `startos/init/index.ts`.

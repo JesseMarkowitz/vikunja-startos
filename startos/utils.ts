@@ -1,9 +1,5 @@
 import { T } from '@start9labs/start-sdk'
-import {
-  defaultMaxAttachmentSize,
-  Store,
-  storeJson,
-} from './fileModels/store.json'
+import { defaultMaxAttachmentSize, Store } from './fileModels/store.json'
 import { sdk } from './sdk'
 
 export const uiPort = 3456 as const
