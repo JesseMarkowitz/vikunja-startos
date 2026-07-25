@@ -1,7 +1,7 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 
 export const current = VersionInfo.of({
-  version: '2.4.0:1',
+  version: '2.4.0:2',
   releaseNotes: {
     en_US: `Updated Vikunja to 2.4.0.
 
