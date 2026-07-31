@@ -49,8 +49,19 @@ export const main = sdk.setupMain(async ({ effects }) => {
   )
 
   if (!env.VIKUNJA_SERVICE_SECRET) {
+    // StartOS retries a failed `main` on a fixed interval and surfaces nothing
+    // — not in the service log, not in the OS log, not in statusInfo.error — so
+    // a throw here reads as a service that restarts every 10s for no stated
+    // reason. Say what happened before throwing, and say which of the two
+    // causes it was: the store not being readable at all, or it being readable
+    // without a secret.
+    console.error(
+      store === null
+        ? 'store.json could not be read — every setting fell back to its default, including the JWT secret'
+        : 'store.json was read but carries no VIKUNJA_SERVICE_SECRET',
+    )
     throw new Error(
-      'VIKUNJA_SERVICE_SECRET is empty — ensureSecret init step did not run',
+      'VIKUNJA_SERVICE_SECRET is empty — ensureSecret should have generated one on init',
     )
   }
 

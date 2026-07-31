@@ -85,7 +85,9 @@ After install, one **critical** task appears on the Vikunja service page:
 
 The primary URL is auto-seeded to a `.local` address on install, so the service is reachable immediately — there is no setup task for it. It governs links in outgoing email, not access: the web UI works at every address the service is exposed at. Change it any time with the **Set Primary URL** action (e.g. to a Tor `.onion` or a custom domain); StartOS re-prompts with an `important` task if the chosen URL later becomes unreachable, which affects email links only and never stops the service.
 
-A persistent JWT secret is generated once at install time and stored in `store.json`, so container restarts and updates do not log everyone out.
+A persistent JWT secret is stored in `store.json`, so container restarts and updates do not log everyone out.
+
+`ensureSecret` runs on **every** init kind and generates one only when the store has none — the read-before-write is what preserves the secret across updates and restores. It deliberately does not also gate on `kind === 'install'`. That gate reads like a second layer of the same protection, but it was the only thing standing between an absent secret and one being minted: `main` throws when `VIKUNJA_SERVICE_SECRET` is empty, so any path reaching a later init without one — an upgrade whose stored value didn't survive, a restore from a store predating the field — left the service permanently unable to start, retrying every 10s with nothing able to fill the value in. Generating on demand costs one forced re-login in the case where the secret was already lost; gating on install costs the service.
 
 Once a user exists, log in at any address the `webui` interface is exposed at — not only the primary URL.
 
