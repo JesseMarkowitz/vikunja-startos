@@ -13,7 +13,7 @@
 
 [Vikunja](https://vikunja.io) is an open-source, self-hostable to-do and project manager — kanban boards, gantt charts, table views, attachments, labels, filters, and CalDAV in one app.
 
-This package wraps Vikunja for StartOS. The first user is created via a gated StartOS Action (public registration is disabled by default), SMTP can be sourced from either StartOS's system SMTP or a custom server, and the public URL / CORS are managed automatically from the chosen primary URL.
+This package wraps Vikunja for StartOS. The first user is created via a gated StartOS Action (public registration is disabled by default), SMTP can be sourced from either StartOS's system SMTP or a custom server, and CORS is managed automatically from every address the service is reachable at.
 
 ---
 
@@ -81,13 +81,13 @@ The `main` volume root is mounted at `/data` so Vikunja can chown the entire sub
 
 After install, one **critical** task appears on the Vikunja service page:
 
-1. **Create User.** Public registration is disabled by default, so this action is the only way to create the initial account. It accepts a username and email, generates a strong password (never prompts for one), runs `vikunja user create` inside a temporary subcontainer, and returns the credentials. The same action stays available afterward for adding more users; the critical task resolves once the first user exists.
+1. **Create User.** Public registration is disabled by default, so this action is the only way to create the initial account. It accepts a username and email, generates a strong password (never prompts for one), runs `vikunja user create` inside a temporary subcontainer, and returns the credentials. The same action stays available afterward for adding more users; the critical task resolves once any user exists — including users created outside this action, since the check asks Vikunja rather than trusting the `initialUserCreated` flag alone.
 
-The primary URL is auto-seeded to a `.local` address on install, so the service is reachable immediately — there is no setup task for it. Change it any time with the **Set Primary URL** action (e.g. to a Tor `.onion` or a custom domain); StartOS only re-prompts (with a critical task) if the chosen URL later becomes unreachable.
+The primary URL is auto-seeded to a `.local` address on install, so the service is reachable immediately — there is no setup task for it. It governs links in outgoing email, not access: the web UI works at every address the service is exposed at. Change it any time with the **Set Primary URL** action (e.g. to a Tor `.onion` or a custom domain); StartOS re-prompts with an `important` task if the chosen URL later becomes unreachable, which affects email links only and never stops the service.
 
 A persistent JWT secret is generated once at install time and stored in `store.json`, so container restarts and updates do not log everyone out.
 
-Once the first user exists, log in at `https://<primary-url>/`.
+Once a user exists, log in at any address the `webui` interface is exposed at — not only the primary URL.
 
 ---
 
@@ -103,26 +103,41 @@ Once the first user exists, log in at `https://<primary-url>/`.
 | Email reminders on/off                           | TOTP enrollment                                  |
 | Maximum attachment size                          | Migration imports (Todoist, Trello, Asana, etc.) |
 | SMTP (disabled / system / custom)                |                                                  |
-| CORS origins (derived from primary URL)          |                                                  |
+| CORS origins (every reachable address)           |                                                  |
 | Time zone (fixed to UTC)                         |                                                  |
 | CalDAV and TOTP toggles (both forced on)         |                                                  |
 
-All Vikunja configuration is plumbed via environment variables (`VIKUNJA_<SECTION>_<KEY>`) — there is no on-disk `config.yml`. `getVikunjaEnv(store, smtp)` in `startos/utils.ts` builds the env: the stored settings pass straight through, and the caller supplies the `VIKUNJA_MAILER_*` fragment. Only the daemon (`main.ts`) and the **Send Test Email** action send mail, so they resolve SMTP — reading StartOS system SMTP only when the user chose it as the source — and pass the result via `mailerEnv()`. The other CLI commands don't send email, so they pass `{}` and never touch SMTP.
+All Vikunja configuration is plumbed via environment variables (`VIKUNJA_<SECTION>_<KEY>`) — there is no on-disk `config.yml`. `getVikunjaEnv(store, smtp, cors)` in `startos/utils.ts` builds the env: the stored settings pass straight through, and the caller supplies the `VIKUNJA_MAILER_*` fragment. Only the daemon (`main.ts`) and the **Send Test Email** action send mail, so they resolve SMTP — reading StartOS system SMTP only when the user chose it as the source — and pass the result via `mailerEnv()`. The other CLI commands don't send email, so they pass `{}` and never touch SMTP.
+
+### CORS and the primary URL
+
+The web UI is a browser app calling the API on the same origin it was loaded from, so **every address the service is exposed at must be an accepted origin** — StartOS lets the user decide where a service is reachable, and several addresses are valid at once. `main.ts` reads them with `getWebuiUrls()` and passes the list as `VIKUNJA_CORS_ORIGINS`. The read is a `.const`, so enabling Tor or a tunnel later re-runs `main` with the new address already allowed.
+
+Two Vikunja behaviors shape this (both in its `pkg/config/config.go`):
+
+- **Origins are whitespace-separated**, not comma-separated. Vikunja stores an env value as a plain string and reads it back through viper's `GetStringSlice`, which splits with `strings.Fields`. Vikunja appends `publicurl` to the list itself, so it needs no entry of its own.
+- **CORS on with an empty `publicurl` is fatal**: `log.Fatalf("service.publicurl is required when cors.enable is true")`, and CORS defaults on. Two consequences. `main.ts` falls back to any reachable address when the store has no primary URL, and drops CORS entirely if there is no address at all, so the daemon can never abort here. And CLI callers pass `cors: null` — which sets `VIKUNJA_CORS_ENABLE=false` — because CORS is meaningless for a command that serves no HTTP, and leaving it at the default would make every action inherit the same requirement. That matters at init, where the account check runs before the primary URL is seeded.
 
 Mutable settings persist in `store.json` on the `startos` volume. Each setting is keyed by the **Vikunja env var it populates**, with the value stored in the exact form the env expects (`'true'`/`'false'`, size strings), so `getVikunjaEnv()` passes them straight through. The exceptions are `initialUserCreated` (internal package state, never an env var) and the SMTP config, which can't be a flat env value — system credentials are read from StartOS at runtime — so it stays structured and resolves to `VIKUNJA_MAILER_*`.
 
-| Key                                    | Default                                       | Mutated by                                  |
-| -------------------------------------- | --------------------------------------------- | ------------------------------------------- |
-| `initialUserCreated`                   | `false`                                       | Create User                                 |
-| `VIKUNJA_SERVICE_SECRET`               | generated on install                          | (internal — never overwritten)              |
-| `VIKUNJA_SERVICE_PUBLICURL`            | auto-seeded `.local` URL                      | Set Primary URL                             |
-| `VIKUNJA_SERVICE_ENABLEREGISTRATION`   | `'false'`                                     | Enable / Disable Registration               |
-| `VIKUNJA_SERVICE_ENABLEUSERDELETION`   | `'true'`                                      | Enable / Disable Self-Service User Deletion |
-| `VIKUNJA_SERVICE_ENABLELINKSHARING`    | `'false'`                                     | Enable / Disable Link Sharing               |
-| `VIKUNJA_SERVICE_ENABLEEMAILREMINDERS` | `'false'`                                     | Enable / Disable Email Reminders            |
-| `VIKUNJA_FILES_MAXSIZE`                | `'20MB'`                                      | Set Max Attachment Size                     |
-| `smtp`                                 | `{ selection: 'disabled' }`                   | Configure SMTP                              |
-| `smtpAdvanced`                         | `{ skipTlsVerify: false, authType: 'plain' }` | Configure SMTP (Advanced group)             |
+`initialUserCreated` is a cache, not the source of truth. Only the Create User action sets it, so on its own it records "did the user bootstrap through us", not "does an account exist" — an account created any other way (registration briefly enabled, a restore from a store that predates the flag) left it `false` and the critical task reappeared forever. Init now trusts the flag when it is set and otherwise asks Vikunja directly via `listVikunjaUsers()`, healing the flag when accounts turn out to exist. The CLI probe therefore runs only on a fresh install or a stale store, never on a steady-state service.
+
+**A filed task does not retract itself.** StartOS keeps a task `active` until something clears it, so declining to re-create it on the next pass changes nothing — and a `critical` one blocks the service from starting at all. Whenever a user is known to exist, init therefore clears it explicitly with `sdk.action.clearTask(effects, '<id>:user-create')`; `createTask` derives that replay key as `` `${packageId}:${actionId}` `` when the caller supplies none. The call is a no-op when no task is filed, so it is safe on every init, and it runs on the cached-flag path too — a service that healed its flag under an earlier build still carries the stale task, and this is what releases it. Note the asymmetry in StartOS: the user-facing `clear-task` RPC refuses to clear a `critical` task without `--force`, while the service's own `clearTasks` effect has no such guard. A user should not be able to dismiss a critical task; the service that raised it may retract it.
+
+Because these are init handlers, the self-heal runs when init runs — install, update, restore, or container rebuild — not on a plain `start`. That matters: a `critical` task blocks `start`, so a service that is already stuck cannot clear itself by being started. It clears on the next update, which is the path a stuck install actually arrives by.
+
+| Key                                    | Default                                       | Mutated by                                        |
+| -------------------------------------- | --------------------------------------------- | ------------------------------------------------- |
+| `initialUserCreated`                   | `false`                                       | Create User (self-heals from `vikunja user list`) |
+| `VIKUNJA_SERVICE_SECRET`               | generated on install                          | (internal — never overwritten)                    |
+| `VIKUNJA_SERVICE_PUBLICURL`            | auto-seeded `.local` URL                      | Set Primary URL                                   |
+| `VIKUNJA_SERVICE_ENABLEREGISTRATION`   | `'false'`                                     | Enable / Disable Registration                     |
+| `VIKUNJA_SERVICE_ENABLEUSERDELETION`   | `'true'`                                      | Enable / Disable Self-Service User Deletion       |
+| `VIKUNJA_SERVICE_ENABLELINKSHARING`    | `'false'`                                     | Enable / Disable Link Sharing                     |
+| `VIKUNJA_SERVICE_ENABLEEMAILREMINDERS` | `'false'`                                     | Enable / Disable Email Reminders                  |
+| `VIKUNJA_FILES_MAXSIZE`                | `'20MB'`                                      | Set Max Attachment Size                           |
+| `smtp`                                 | `{ selection: 'disabled' }`                   | Configure SMTP                                    |
+| `smtpAdvanced`                         | `{ skipTlsVerify: false, authType: 'plain' }` | Configure SMTP (Advanced group)                   |
 
 A change to any of these triggers a daemon restart so the new env takes effect.
 
@@ -136,7 +151,7 @@ A change to any of these triggers a daemon restart so the new env takes effect.
 
 Single MultiHost (`'main'`) with one bound port. StartOS publishes the interface over LAN (`.local`), Tor (`.onion`), and any custom domains the operator adds; TLS is terminated at the StartOS edge.
 
-CalDAV is reachable through the same web interface at `/dav/...` (`VIKUNJA_SERVICE_ENABLECALDAV=true`). It is not exposed as a separate StartOS interface card — point your CalDAV client at the same primary URL.
+CalDAV is reachable through the same web interface at `/dav/...` (`VIKUNJA_SERVICE_ENABLECALDAV=true`). It is not exposed as a separate StartOS interface card — point your CalDAV client at any address the `webui` interface serves. CORS is skipped for `/dav` and `/feeds` upstream (CalDAV needs its own `OPTIONS` handling), so the allowlist does not affect it.
 
 ---
 
@@ -146,14 +161,14 @@ Three groups appear in the StartOS UI (sorted alphabetically): **Accounts**, **E
 
 ### Accounts
 
-| Display name                                                           | Action ID              | Availability | Notes                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------- | ---------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create User                                                            | `user-create`          | any          | Username + email only — generates and returns a strong password (never prompts). Surfaced as the critical install task until the first user exists (`initialUserCreated` flag); stays available for additional users. |
-| List Users                                                             | `user-list`            | any          | Parses Vikunja's `user list` table into per-user accordions (ID, username, email).                                                                                                                                    |
-| Reset User Password                                                    | `user-reset-password`  | only running | `vikunja user reset-password --direct`. Generates and returns a strong password (never prompts). For lockout recovery.                                                                                                |
-| Delete User                                                            | `user-delete`          | only running | `vikunja user delete --now`. Immediate and irreversible (action `warning` is the confirmation).                                                                                                                       |
-| Enable Registration / Disable Registration                             | `toggle-registration`  | any          | Dynamic label. Default disabled.                                                                                                                                                                                      |
-| Enable Self-Service User Deletion / Disable Self-Service User Deletion | `toggle-user-deletion` | any          | Dynamic label. Default enabled.                                                                                                                                                                                       |
+| Display name                                                           | Action ID              | Availability | Notes                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------- | ---------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create User                                                            | `user-create`          | any          | Username + email only — generates and returns a strong password (never prompts). Surfaced as the critical install task until a user exists (`initialUserCreated` flag, verified against `vikunja user list` when unset); stays available for additional users. |
+| List Users                                                             | `user-list`            | any          | Parses Vikunja's `user list` table into per-user accordions (ID, username, email).                                                                                                                                                                             |
+| Reset User Password                                                    | `user-reset-password`  | only running | `vikunja user reset-password --direct`. Generates and returns a strong password (never prompts). For lockout recovery.                                                                                                                                         |
+| Delete User                                                            | `user-delete`          | only running | `vikunja user delete --now`. Immediate and irreversible (action `warning` is the confirmation).                                                                                                                                                                |
+| Enable Registration / Disable Registration                             | `toggle-registration`  | any          | Dynamic label. Default disabled.                                                                                                                                                                                                                               |
+| Enable Self-Service User Deletion / Disable Self-Service User Deletion | `toggle-user-deletion` | any          | Dynamic label. Default enabled.                                                                                                                                                                                                                                |
 
 ### Email
 
@@ -165,12 +180,12 @@ Three groups appear in the StartOS UI (sorted alphabetically): **Accounts**, **E
 
 ### Other
 
-| Display name                               | Action ID             | Availability | Notes                                                                                                                       |
-| ------------------------------------------ | --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Set Primary URL                            | `set-primary-url`     | any          | Change the primary URL (`.local` is auto-seeded on install — no setup task). Reactive: the daemon restarts when it changes. |
-| Enable Link Sharing / Disable Link Sharing | `toggle-link-sharing` | any          | Dynamic label. Default disabled. Warns about exposure when enabling.                                                        |
-| Set Max Attachment Size                    | `max-attachment-size` | any          | Change `VIKUNJA_FILES_MAXSIZE` (string format like `20MB`, `200MB`, `2GB`).                                                 |
-| Run Diagnostics                            | `doctor`              | any          | `vikunja doctor` output for troubleshooting install or startup issues.                                                      |
+| Display name                               | Action ID             | Availability | Notes                                                                                                                                                                                                                       |
+| ------------------------------------------ | --------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Set Primary URL                            | `set-primary-url`     | any          | Change the primary URL used for links in outgoing email (`.local` is auto-seeded on install — no setup task). Does not gate access; the UI works at every reachable address. Reactive: the daemon restarts when it changes. |
+| Enable Link Sharing / Disable Link Sharing | `toggle-link-sharing` | any          | Dynamic label. Default disabled. Warns about exposure when enabling.                                                                                                                                                        |
+| Set Max Attachment Size                    | `max-attachment-size` | any          | Change `VIKUNJA_FILES_MAXSIZE` (string format like `20MB`, `200MB`, `2GB`).                                                                                                                                                 |
+| Run Diagnostics                            | `doctor`              | any          | `vikunja doctor` output for troubleshooting install or startup issues.                                                                                                                                                      |
 
 Every action that shells into Vikunja runs in a temporary subcontainer with `/etc/passwd` and `/etc/group` planted (the upstream `FROM scratch` image has neither) and the full env block plumbed in.
 
@@ -291,7 +306,7 @@ actions:
 
 Maintainer pointers:
 
-- Env vars are built in `getVikunjaEnv(store, smtp)`; the mailer fragment comes from `mailerEnv()`, which only the daemon and Send Test Email build — all in `startos/utils.ts`.
+- Env vars are built in `getVikunjaEnv(store, smtp, cors)`; the mailer fragment comes from `mailerEnv()`, which only the daemon and Send Test Email build — all in `startos/utils.ts`. Only the daemon passes `cors`; CLI callers pass `null` and get CORS off.
 - All actions register through `startos/actions/index.ts`; the action files themselves are grouped into `accounts/`, `email/`, and `other/` subfolders matching their UI group.
 - All init steps register through `startos/init/index.ts`.
 - All locale strings live in `startos/i18n/dictionaries/default.ts` and `translations.ts`.

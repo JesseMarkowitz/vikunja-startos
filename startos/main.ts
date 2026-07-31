@@ -6,6 +6,7 @@ import {
   customCredentials,
   dataMount,
   getVikunjaEnv,
+  getWebuiUrls,
   mailerEnv,
   plantPasswd,
   uiPort,
@@ -25,12 +26,26 @@ export const main = sdk.setupMain(async ({ effects }) => {
     creds = customCredentials(smtp.value.provider.value)
   }
 
+  // Every address the web UI is reachable at becomes an accepted CORS origin,
+  // so the frontend works wherever the user chose to expose it rather than only
+  // at the one URL stored as primary. `.const` inside `getWebuiUrls` makes this
+  // reactive: enabling Tor or a tunnel later re-runs main with the new address
+  // already in the allowlist.
+  const urls = await getWebuiUrls(effects)
+
+  // publicurl is only used for outbound links (emails, migration redirects),
+  // but Vikunja refuses to start if it is empty while CORS is on. Fall back to
+  // any reachable address so a service whose primary URL was never seeded still
+  // boots; with no address at all, CORS goes off rather than aborting startup.
+  const publicUrl = store?.VIKUNJA_SERVICE_PUBLICURL || urls[0] || ''
+
   const env = getVikunjaEnv(
-    store,
+    store && { ...store, VIKUNJA_SERVICE_PUBLICURL: publicUrl },
     mailerEnv(
       creds,
       store?.smtpAdvanced ?? { skipTlsVerify: false, authType: 'plain' },
     ),
+    publicUrl ? { origins: urls } : null,
   )
 
   if (!env.VIKUNJA_SERVICE_SECRET) {

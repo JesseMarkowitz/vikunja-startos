@@ -61,7 +61,7 @@ const dict = {
   'Email reminders for assigned and overdue tasks are currently disabled. Run this action to enable them.': 57,
   'SMTP is currently disabled. Enabling email reminders has no effect until you configure SMTP via Configure SMTP.': 58,
   'Primary URL': 59,
-  'Used for email links, invitations, and frontend/API communication. Must be a URL Vikunja is reachable at.': 60,
+  'Used for email links and invitations. Every address Vikunja is reachable at works in the browser regardless of this setting.': 60,
   'Set Primary URL': 61,
   'Choose which of your Vikunja URLs should serve as the primary URL.': 62,
   'Username or user ID': 63,
@@ -78,7 +78,7 @@ const dict = {
   'Vikunja could not delete the user: ${stderr}': 74,
   'User Deleted': 75,
   'User "${user}" has been removed.': 76,
-  'Your Vikunja primary URL is no longer available. Pick a new one from the list.': 77,
+  'Your Vikunja primary URL is no longer available. Pick a new one so email links point somewhere reachable.': 77,
   'Create your first Vikunja user account. Public registration is disabled by default, so this is the only way to create the initial account.': 78,
   'Web UI': 79,
   'The Vikunja web interface': 80,
@@ -96,6 +96,13 @@ const dict = {
   Other: 92,
   'Create a Vikunja user. A strong password is generated and returned below — the user can change it later in Vikunja.': 93,
   'Generate a new password for a user and return it — use this to recover access if a password is lost. No email is sent.': 94,
+
+  // Init progress phases, shown in the StartOS install/update bar.
+  'Seeding configuration': 95,
+  'Preparing data directory': 96,
+  'Generating session secret': 97,
+  'Checking for existing accounts': 98,
+  'Resolving primary URL': 99,
 } as const
 
 /**

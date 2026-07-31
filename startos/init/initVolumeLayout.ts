@@ -1,3 +1,4 @@
+import { i18n } from '../i18n'
 import { sdk } from '../sdk'
 import {
   DATA_MOUNT,
@@ -28,23 +29,31 @@ import {
  *
  * Idempotent: mkdir -p and chown -R are safe to repeat on every init.
  */
-export const initVolumeLayout = sdk.setupOnInit(async (effects, kind) => {
-  if (!kind) return // skip on plain container rebuild
+export const initVolumeLayout = sdk.setupOnInit(
+  async (effects, kind, progress) => {
+    if (!kind) return // skip on plain container rebuild
 
-  await sdk.SubContainer.withTemp(
-    effects,
-    { imageId: 'busybox' },
-    dataMount,
-    'vikunja-init-volume-layout',
-    async (sub) => {
-      await sub.execFail(
-        [
-          'sh',
-          '-c',
-          `mkdir -p ${DATA_MOUNT}/${DB_SUBPATH} ${DATA_MOUNT}/${FILES_SUBPATH} && chown -R ${VIKUNJA_UID}:${VIKUNJA_GID} ${DATA_MOUNT}`,
-        ],
-        { user: 'root' },
-      )
-    },
-  )
-})
+    // Weighted well above the bookkeeping steps: a recursive chown over a
+    // populated /data is the slowest thing init does.
+    const phase = progress.addPhase(i18n('Preparing data directory'), 20)
+
+    await sdk.SubContainer.withTemp(
+      effects,
+      { imageId: 'busybox' },
+      dataMount,
+      'vikunja-init-volume-layout',
+      async (sub) => {
+        await sub.execFail(
+          [
+            'sh',
+            '-c',
+            `mkdir -p ${DATA_MOUNT}/${DB_SUBPATH} ${DATA_MOUNT}/${FILES_SUBPATH} && chown -R ${VIKUNJA_UID}:${VIKUNJA_GID} ${DATA_MOUNT}`,
+          ],
+          { user: 'root' },
+        )
+      },
+    )
+
+    phase.complete()
+  },
+)
