@@ -6,6 +6,7 @@ import {
   customCredentials,
   dataMount,
   getVikunjaEnv,
+  getWebuiUrls,
   mailerEnv,
   plantPasswd,
   uiPort,
@@ -25,17 +26,42 @@ export const main = sdk.setupMain(async ({ effects }) => {
     creds = customCredentials(smtp.value.provider.value)
   }
 
+  // Every address the web UI is reachable at becomes an accepted CORS origin,
+  // so the frontend works wherever the user chose to expose it rather than only
+  // at the one URL stored as primary. `.const` inside `getWebuiUrls` makes this
+  // reactive: enabling Tor or a tunnel later re-runs main with the new address
+  // already in the allowlist.
+  const urls = await getWebuiUrls(effects)
+
+  // publicurl is only used for outbound links (emails, migration redirects),
+  // but Vikunja refuses to start if it is empty while CORS is on. Fall back to
+  // any reachable address so a service whose primary URL was never seeded still
+  // boots; with no address at all, CORS goes off rather than aborting startup.
+  const publicUrl = store?.VIKUNJA_SERVICE_PUBLICURL || urls[0] || ''
+
   const env = getVikunjaEnv(
-    store,
+    store && { ...store, VIKUNJA_SERVICE_PUBLICURL: publicUrl },
     mailerEnv(
       creds,
       store?.smtpAdvanced ?? { skipTlsVerify: false, authType: 'plain' },
     ),
+    publicUrl ? { origins: urls } : null,
   )
 
   if (!env.VIKUNJA_SERVICE_SECRET) {
+    // StartOS retries a failed `main` on a fixed interval and surfaces nothing
+    // — not in the service log, not in the OS log, not in statusInfo.error — so
+    // a throw here reads as a service that restarts every 10s for no stated
+    // reason. Say what happened before throwing, and say which of the two
+    // causes it was: the store not being readable at all, or it being readable
+    // without a secret.
+    console.error(
+      store === null
+        ? 'store.json could not be read — every setting fell back to its default, including the JWT secret'
+        : 'store.json was read but carries no VIKUNJA_SERVICE_SECRET',
+    )
     throw new Error(
-      'VIKUNJA_SERVICE_SECRET is empty — ensureSecret init step did not run',
+      'VIKUNJA_SERVICE_SECRET is empty — ensureSecret should have generated one on init',
     )
   }
 

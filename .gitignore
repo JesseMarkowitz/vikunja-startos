@@ -8,3 +8,7 @@ javascript
 ncc-cache
 tasks/
 bun.lock
+# Downloaded service logs kept for local debugging — never committed
+*-logs.html
+*-logs.txt
+*.log

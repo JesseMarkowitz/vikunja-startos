@@ -1,33 +1,7 @@
 import { storeJson } from '../../fileModels/store.json'
 import { i18n } from '../../i18n'
 import { sdk } from '../../sdk'
-import { getVikunjaEnv, stripVikunjaLogs, withVikunjaCli } from '../../utils'
-
-type ParsedUser = { id: string; username: string; email: string }
-
-// Vikunja's `user list` prints an ASCII box-drawing table whose columns
-// auto-grow to fit the widest cell — rows are not wrapped. Each data row
-// looks like `│ 1  │ alice │ alice@example.com │ Active │ ... │`. We pull
-// ID/USERNAME/EMAIL from the first three cells; the header row is the
-// first `│`-line and is skipped by requiring a numeric ID.
-function parseUserTable(text: string): ParsedUser[] {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('│') && line.endsWith('│'))
-    .map((row) => {
-      const cells = row
-        .slice(1, -1)
-        .split('│')
-        .map((c) => c.trim())
-      return {
-        id: cells[0] ?? '',
-        username: cells[1] ?? '',
-        email: cells[2] ?? '',
-      }
-    })
-    .filter((u) => /^\d+$/.test(u.id))
-}
+import { listVikunjaUsers } from '../../utils'
 
 export const userList = sdk.Action.withoutInput(
   'user-list',
@@ -42,20 +16,9 @@ export const userList = sdk.Action.withoutInput(
   },
 
   async ({ effects }) => {
-    const raw = await withVikunjaCli(
+    const { raw, users } = await listVikunjaUsers(
       effects,
-      'vikunja-user-list',
-      getVikunjaEnv(await storeJson.read().once()),
-      async (sub, env) => {
-        const res = await sub.execFail(
-          ['/app/vikunja/vikunja', 'user', 'list'],
-          { env, user: 'vikunja' },
-        )
-        return [res.stdout.toString(), res.stderr.toString()]
-          .map(stripVikunjaLogs)
-          .filter(Boolean)
-          .join('\n')
-      },
+      await storeJson.read().once(),
     )
 
     if (!raw) {
@@ -66,8 +29,6 @@ export const userList = sdk.Action.withoutInput(
         result: null,
       }
     }
-
-    const users = parseUserTable(raw)
 
     // Parser failed (unexpected output format): fall back to dumping the
     // raw text in the message so the user still sees something useful.

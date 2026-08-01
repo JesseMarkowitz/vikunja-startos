@@ -44,10 +44,12 @@ export async function plantPasswd(sub: {
 
 /**
  * Read the URLs of the 'webui' service interface (excluding localhost and
- * link-local). Used to populate the Set Primary URL dropdown and to auto-seed
- * a .local URL on install.
+ * link-local). Three consumers: the Set Primary URL dropdown, the auto-seed of
+ * a .local URL on install, and the daemon's CORS allowlist — the frontend may
+ * be loaded from any of these addresses, so every one of them has to be an
+ * accepted origin.
  */
-export async function getPrimaryUrls(effects: T.Effects): Promise<string[]> {
+export async function getWebuiUrls(effects: T.Effects): Promise<string[]> {
   return sdk.host
     .getOwn(effects, mainHostId, (host) => {
       const iface =
@@ -110,10 +112,16 @@ export function mailerEnv(
  * the env vars, so the stored settings pass straight through. SMTP is resolved
  * by the caller (only the daemon and Send Test Email need it) and passed in as
  * `smtp`; CLI commands that don't send mail leave it `{}`.
+ *
+ * `cors` is the daemon's allowlist of accepted browser origins — pass every
+ * address the web UI is reachable at. CLI callers pass `null`, which disables
+ * CORS: it is meaningless for a command that serves no HTTP, and leaving it on
+ * would make every CLI invocation inherit the publicurl requirement below.
  */
 export function getVikunjaEnv(
   store: Store | null,
   smtp: Record<string, string> = {},
+  cors: { origins: string[] } | null = null,
 ): Record<string, string> {
   return {
     // Static / computed
@@ -139,6 +147,20 @@ export function getVikunjaEnv(
       store?.VIKUNJA_SERVICE_ENABLEEMAILREMINDERS ?? 'false',
     VIKUNJA_FILES_MAXSIZE:
       store?.VIKUNJA_FILES_MAXSIZE ?? defaultMaxAttachmentSize,
+
+    // CORS. Vikunja aborts at startup with "service.publicurl is required when
+    // cors.enable is true" whenever CORS is on and publicurl is empty, and it
+    // defaults CORS on — so a caller with no origins must switch it off rather
+    // than leave the default. Origins are whitespace-separated: Vikunja stores
+    // an env value as a plain string and reads it back through viper's
+    // GetStringSlice, which splits with strings.Fields. Vikunja appends
+    // publicurl to this list itself, so it needs no entry here.
+    ...(cors
+      ? {
+          VIKUNJA_CORS_ENABLE: 'true',
+          VIKUNJA_CORS_ORIGINS: cors.origins.join(' '),
+        }
+      : { VIKUNJA_CORS_ENABLE: 'false' }),
 
     // SMTP — resolved by the caller (daemon / Send Test Email); `{}` otherwise
     ...smtp,
@@ -188,4 +210,58 @@ export function stripVikunjaLogs(text: string): string {
     .filter((line) => !/^time=\d{4}-\d{2}-\d{2}T/.test(line.trim()))
     .join('\n')
     .trim()
+}
+
+export type VikunjaUser = { id: string; username: string; email: string }
+
+// Vikunja's `user list` prints an ASCII box-drawing table whose columns
+// auto-grow to fit the widest cell — rows are not wrapped. Each data row
+// looks like `│ 1  │ alice │ alice@example.com │ Active │ ... │`. We pull
+// ID/USERNAME/EMAIL from the first three cells; the header row is the
+// first `│`-line and is skipped by requiring a numeric ID.
+function parseUserTable(text: string): VikunjaUser[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('│') && line.endsWith('│'))
+    .map((row) => {
+      const cells = row
+        .slice(1, -1)
+        .split('│')
+        .map((c) => c.trim())
+      return {
+        id: cells[0] ?? '',
+        username: cells[1] ?? '',
+        email: cells[2] ?? '',
+      }
+    })
+    .filter((u) => /^\d+$/.test(u.id))
+}
+
+/**
+ * Run `vikunja user list` and return both the parsed rows and the cleaned raw
+ * output. Two callers with different needs: the List Users action falls back to
+ * showing `raw` when the table format defeats the parser, while init only cares
+ * whether any account exists. Throws if the CLI itself fails.
+ */
+export async function listVikunjaUsers(
+  effects: T.Effects,
+  store: Store | null,
+): Promise<{ raw: string; users: VikunjaUser[] }> {
+  const raw = await withVikunjaCli(
+    effects,
+    'vikunja-user-list',
+    getVikunjaEnv(store),
+    async (sub, env) => {
+      const res = await sub.execFail(['/app/vikunja/vikunja', 'user', 'list'], {
+        env,
+        user: 'vikunja',
+      })
+      return [res.stdout.toString(), res.stderr.toString()]
+        .map(stripVikunjaLogs)
+        .filter(Boolean)
+        .join('\n')
+    },
+  )
+  return { raw, users: parseUserTable(raw) }
 }

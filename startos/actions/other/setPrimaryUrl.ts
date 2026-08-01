@@ -1,17 +1,17 @@
 import { storeJson } from '../../fileModels/store.json'
 import { i18n } from '../../i18n'
 import { sdk } from '../../sdk'
-import { getPrimaryUrls } from '../../utils'
+import { getWebuiUrls } from '../../utils'
 
 const { InputSpec, Value } = sdk
 
 const inputSpec = InputSpec.of({
   url: Value.dynamicSelect(async ({ effects }) => {
-    const urls = await getPrimaryUrls(effects)
+    const urls = await getWebuiUrls(effects)
     return {
       name: i18n('Primary URL'),
       description: i18n(
-        'Used for email links, invitations, and frontend/API communication. Must be a URL Vikunja is reachable at.',
+        'Used for email links and invitations. Every address Vikunja is reachable at works in the browser regardless of this setting.',
       ),
       values: urls.reduce(
         (obj, url) => ({ ...obj, [url]: url }),
