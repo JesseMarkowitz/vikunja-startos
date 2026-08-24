@@ -34,31 +34,11 @@ export const doctor = sdk.Action.withoutInput(
       },
     )
 
-    if (!raw) {
-      return {
-        version: '1' as const,
-        title: i18n('Doctor Output'),
-        message: i18n('Doctor produced no output.'),
-        result: null,
-      }
-    }
-
-    // The dialog renders `message` as plain text but preserves newlines,
-    // while a `single` result collapses to one line. Put the diagnostic
-    // text in the message and use `result` only as a copy-to-clipboard.
     return {
       version: '1' as const,
       title: i18n('Doctor Output'),
-      message: raw,
-      result: {
-        type: 'single',
-        name: i18n('Diagnostic Output'),
-        description: null,
-        value: raw,
-        masked: false,
-        copyable: true,
-        qr: false,
-      },
+      message: raw || i18n('Doctor produced no output.'),
+      result: null,
     }
   },
 )

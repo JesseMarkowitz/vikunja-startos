@@ -85,7 +85,6 @@ const dict = {
   "Run Vikunja's built-in diagnostic checks and return the output. Useful when troubleshooting install or startup problems.": 81,
   'A test email was sent to ${to}. Check the recipient inbox; if it does not arrive, review the SMTP settings and the Vikunja logs.': 82,
   '${count} user(s).': 83,
-  'Diagnostic Output': 84,
   ID: 85,
   'No spaces or commas.': 86,
   'Cannot look like a URL.': 87,
