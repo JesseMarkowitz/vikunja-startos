@@ -3,16 +3,7 @@ import { i18n } from '../../i18n'
 import { sdk } from '../../sdk'
 import { listVikunjaUsers, VikunjaUser } from '../../utils'
 
-/**
- * A select over the accounts that exist when the form opens, read through
- * Vikunja's own `user list`. Keyed by user ID rather than username: the CLI
- * parses its user argument as an ID first and only falls back to a username
- * when that fails, so a username made of digits would otherwise name a
- * different account.
- *
- * With no accounts, or none readable, the field is disabled with the reason —
- * there is nothing to pick, and a free-text fallback is what this replaced.
- */
+// Keyed by ID: the CLI parses its user argument as an ID before a username.
 export const userSelect = (description: string) =>
   sdk.Value.dynamicSelect(async ({ effects }) => {
     let users: VikunjaUser[] | null = null

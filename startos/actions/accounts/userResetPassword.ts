@@ -53,9 +53,7 @@ export const userResetPassword = sdk.Action.withInput(
         if (res.exitCode !== 0) {
           const reason = cliFailure(res)
           if (/does not exist/i.test(reason)) {
-            throw new Error(
-              i18n('No user matches "${user}".', { user: input.user }),
-            )
+            throw new Error(i18n('That account no longer exists.'))
           }
           throw new Error(
             i18n('Vikunja could not reset the password: ${stderr}', {

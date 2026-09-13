@@ -5,12 +5,7 @@ import { getVikunjaEnv, unwrapVikunjaLogs, withVikunjaCli } from '../../utils'
 
 const { InputSpec, Value } = sdk
 
-/**
- * The `vikunja repair` subcommands, in the order upstream lists them. `repair`
- * on its own is only a help screen — every actual repair is one of these — so
- * the action takes the operation as input rather than shelling out to a bare
- * `repair` that would do nothing.
- */
+// A bare `vikunja repair` only prints help; every repair is one of these.
 const operations = [
   'task-positions',
   'projects',
@@ -86,16 +81,8 @@ export const repair = sdk.Action.withInput(
             { env, user: 'vikunja' },
           )
 
-          // Repair writes everything — findings and startup noise alike — to
-          // stdout as structured log lines (`time=… level=INFO msg="…"`), and
-          // leaves stderr empty even on failure. So stdout unwrapped is both
-          // the report and, when the exit code says so, the reason it failed.
           const body = unwrapVikunjaLogs(res.stdout.toString())
 
-          // Stop at the first failure rather than running the rest against a
-          // database that just refused a repair. The error carries the
-          // sections already collected, and this operation's output once — as
-          // the reason, not also as a section above it.
           if (res.exitCode !== 0) {
             const reason =
               body ||
@@ -118,9 +105,6 @@ export const repair = sdk.Action.withInput(
       },
     )
 
-    // The report is prose, so it goes in `message`, which keeps its line
-    // breaks — the same shape Run Diagnostics uses. A `single` result would
-    // render it a second time, flattened into a one-line field.
     return {
       version: '1' as const,
       title: i18n('Repair Output'),

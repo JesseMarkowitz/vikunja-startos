@@ -40,14 +40,11 @@ export const userDelete = sdk.Action.withInput(
   async ({ effects, input }) => {
     const store = await storeJson.read().once()
 
-    // The list the form showed can be stale by the time it is submitted. Look
-    // the account up again, so one that has since gone is reported as such
-    // rather than as a CLI failure, and so the result can name it.
     const target = (await listVikunjaUsers(effects, store)).users.find(
       (u) => u.id === input.user,
     )
     if (!target) {
-      throw new Error(i18n('No user matches "${user}".', { user: input.user }))
+      throw new Error(i18n('That account no longer exists.'))
     }
 
     await withVikunjaCli(
