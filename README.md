@@ -148,7 +148,7 @@ Removes the account and everything it owns — projects, tasks, attachments — 
 
 - **Input:** the same account list.
 - **Irreversible.** Only a backup brings the account back.
-- **Repeat safety:** the account leaves the list; a form opened before the deletion fails with "no user matches".
+- **Repeat safety:** the account leaves the list; a form opened before the deletion fails with "that account no longer exists".
 
 #### Enable Registration / Disable Registration
 

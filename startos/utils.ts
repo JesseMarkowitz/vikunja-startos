@@ -269,59 +269,32 @@ export async function listVikunjaUsers(
 const VIKUNJA_LOG_LINE =
   /^time=\S+\s+level=(\w+)\s+msg=(?:"((?:[^"\\]|\\.)*)"|(\S*))/
 
-// Chatter Vikunja emits while booting its runtime, before the command itself
-// runs. It arrives on stdout interleaved with the real output, so it has to be
-// dropped by message rather than by stream.
+// Runtime boot chatter; it shares stdout with the real output.
 const VIKUNJA_BOOTSTRAP_LOG =
   /^(No config file found|Running migrations|Using SQLite|Ran all migrations|No license key)/
 
-/**
- * Unwrap Vikunja's structured log lines into plain text.
- *
- * `repair` reports everything it finds as `time=… level=INFO msg="…"` lines —
- * unlike `doctor`, which prints plain text. Handing that to `stripVikunjaLogs`
- * would filter away the entire result, since every line it wants to keep looks
- * exactly like the bootstrap noise that function exists to remove. Pull the
- * `msg` field out instead, and drop the bootstrap lines by message. Anything
- * above INFO keeps its level as a prefix, so a warning or error stays visible
- * rather than reading like a normal finding.
- */
+// `repair` reports as log lines, so `stripVikunjaLogs` would drop its whole output.
 export function unwrapVikunjaLogs(text: string): string {
-  return (
-    text
-      .split('\n')
-      .map((line) => {
-        // A carriage return means a progress bar redrawing itself in place
-        // (`file-mime-types` draws one) — keep only the frame it settled on.
-        const flat = line.split('\r').pop() ?? ''
-        const match = flat.trim().match(VIKUNJA_LOG_LINE)
-        if (!match) return { level: 'INFO', msg: flat.trimEnd() }
-        const msg =
-          match[2] !== undefined
-            ? match[2].replace(/\\"/g, '"').replace(/\\\\/g, '\\')
-            : (match[3] ?? '')
-        return { level: match[1], msg: msg.trimEnd() }
-      })
-      // Filter on the message, not on the formatted line: the license warning is
-      // bootstrap noise too, and it arrives at WARN.
-      .filter(
-        ({ msg }) => msg.trim() && !VIKUNJA_BOOTSTRAP_LOG.test(msg.trim()),
-      )
-      .map(({ level, msg }) => (level === 'INFO' ? msg : `${level}: ${msg}`))
-      .join('\n')
-      .trim()
-  )
+  return text
+    .split('\n')
+    .map((line) => {
+      // \r is a progress bar redrawing in place; keep the final frame.
+      const flat = line.split('\r').pop() ?? ''
+      const match = flat.trim().match(VIKUNJA_LOG_LINE)
+      if (!match) return { level: 'INFO', msg: flat.trimEnd() }
+      const msg =
+        match[2] !== undefined
+          ? match[2].replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+          : (match[3] ?? '')
+      return { level: match[1], msg: msg.trimEnd() }
+    })
+    .filter(({ msg }) => msg.trim() && !VIKUNJA_BOOTSTRAP_LOG.test(msg.trim()))
+    .map(({ level, msg }) => (level === 'INFO' ? msg : `${level}: ${msg}`))
+    .join('\n')
+    .trim()
 }
 
-/**
- * Why a `vikunja` CLI run failed, as text for an error message.
- *
- * Vikunja reports failures through `log.Fatalf`, which writes a `level=ERROR`
- * line to **stdout** and exits 1, leaving stderr empty — so an error built from
- * stderr alone arrives with no reason at all ("could not reset the password: ").
- * Read both streams, keep the ERROR lines when there are any, and fall back to
- * the whole output, then to the exit code.
- */
+// Vikunja's `log.Fatalf` writes its `level=ERROR` line to stdout, not stderr.
 export function cliFailure(res: {
   exitCode: number | null
   stdout: { toString(): string }

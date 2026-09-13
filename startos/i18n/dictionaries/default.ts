@@ -66,7 +66,7 @@ const dict = {
   'Choose which of your Vikunja URLs should serve as the primary URL.': 62,
   'New Password': 65,
   'Reset User Password': 66,
-  'No user matches "${user}".': 67,
+  'That account no longer exists.': 67,
   'Vikunja could not reset the password: ${stderr}': 68,
   'Password Reset': 69,
   'Share the new password with the user over a secure channel.': 70,

@@ -26,12 +26,12 @@ verified, tried, and decided belongs in the commit message and the PR body.
 
 ## This repo
 
-- **`plantPasswd` must run before anything executes in a subcontainer.** The upstream image is `FROM scratch` with `USER 1000` and ships no `/etc/passwd` or `/etc/group`, so start-container's user resolution fails without it — daemon and every CLI action alike.
-- **`busybox` exists because the app image has no shell.** `initVolumeLayout` needs one for `mkdir -p` + `chown -R`.
-- **Mount the volume ROOT, not `subpath: 'db'`.** StartOS auto-creates a mounted subpath as uid 0, which a user-namespaced subcontainer cannot chown. Mounting the root and steering Vikunja's paths via `VIKUNJA_*_PATH` is what makes the ownership fixable.
-- **`main` logs before it throws on a missing secret.** StartOS retries a failed `main` on a timer and surfaces nothing anywhere, so without the `console.error` it reads as an unexplained 10-second restart loop.
-- **CORS on with an empty `publicurl` aborts Vikunja at startup.** `publicurl` therefore falls back to any reachable address, and with no address at all CORS is switched **off** rather than left at its default. Origins are whitespace-separated — viper reads the env value back through `GetStringSlice`, which splits on `strings.Fields`.
-- **Every reachable address is a CORS origin**, read reactively — enabling Tor later re-runs `main` with the new address already allowed. The primary URL is a separate concern: outbound links only.
-- **Vikunja's CLI reports failures on stdout.** `log.Fatalf` writes a `level=ERROR` line to stdout and leaves stderr empty, so read a failed run through `cliFailure`, never through `stderr` alone.
-- **`testing/` never ships and is not type-checked.** It exists because Vikunja won't produce the faults Repair fixes: `python3 testing/injector.py enable` / `disable` wires a fault injector into a throwaway build. `startos/actions/other/injectTestFaults.ts` is gitignored so the enabled state can't be committed.
-- **Backups must include `*-wal`.** Vikunja opens SQLite in WAL mode and never checkpoints on shutdown, so committed data can sit entirely in `vikunja.db-wal` — a backup without it restores an empty or stale database. StartOS stops the service before backing up, so there is no mid-write capture to guard against. Only `*-shm`, a rebuildable index, is excluded.
+The why behind each of these is in `README.md`, under the section named; don't restate it here.
+
+- **Run CLI commands through `withVikunjaCli`, never a bare `SubContainer.withTemp` on the app image** (§ Image and Container Runtime).
+- **Mount the volume root, never `subpath: 'db'` or `'files'`** (§ Volume and Data Layout).
+- **Keep the `console.error` ahead of the throw on a missing secret in `main`** (§ Health Checks).
+- **Join `VIKUNJA_CORS_ORIGINS` with whitespace, not commas** (§ Quick Reference).
+- **Read a failed CLI run through `cliFailure`, never from `stderr` alone** (§ Actions).
+- **Never add `*-wal` back to the backup exclude list** (§ Backups and Restore).
+- **Run `python3 testing/injector.py disable` before committing** — `enable` also edits `startos/manifest/index.ts` and `startos/actions/index.ts`, and only the action file itself is gitignored (`testing/README.md`).
